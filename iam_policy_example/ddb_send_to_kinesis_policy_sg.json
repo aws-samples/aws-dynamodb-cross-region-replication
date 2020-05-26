@@ -1,0 +1,50 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "lambda:InvokeFunction",
+            "Resource": "arn:aws:lambda:ap-southeast-1:<Global account id>:function:ddb-replicator-sg*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "arn:aws:logs:ap-southeast-1:<Global account id>:*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:DescribeStream",
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
+                "dynamodb:ListStreams"
+            ],
+            "Resource": "arn:aws:dynamodb:ap-southeast-1:<Global account id>:table/user-sg/stream/*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParameterHistory",
+                "ssm:GetParametersByPath",
+                "ssm:GetParameters",
+                "ssm:GetParameter"
+            ],
+            "Resource": [
+                "arn:aws:ssm:ap-southeast-1:<Global account id>:parameter/DDBReplication/TableCN/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sqs:*"
+            ],
+            "Resource": [
+                "arn:aws:sqs:ap-southeast-1:<Global account>:ddbstreamsg"
+            ]
+        }
+    ]
+}

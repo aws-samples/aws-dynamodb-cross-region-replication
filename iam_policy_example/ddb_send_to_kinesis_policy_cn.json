@@ -1,0 +1,50 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": "lambda:InvokeFunction",
+            "Resource": "arn:aws-cn:lambda:cn-north-1:<China account>:function:ddb-replicator-cn*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+            ],
+            "Resource": "arn:aws-cn:logs:cn-north-1:<China account>:*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:DescribeStream",
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
+                "dynamodb:ListStreams"
+            ],
+            "Resource": "arn:aws-cn:dynamodb:cn-north-1:<China account>:table/user-cn/stream/*"
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ssm:GetParameterHistory",
+                "ssm:GetParametersByPath",
+                "ssm:GetParameters",
+                "ssm:GetParameter"
+            ],
+            "Resource": [
+                "arn:aws-cn:ssm:cn-north-1:<China account>:parameter/DDBReplication/TableSG/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sqs:*"
+            ],
+            "Resource": [
+                "arn:aws-cn:sqs:cn-north-1:<China account>:ddbstreamcn"
+            ]
+        }
+    ]
+}

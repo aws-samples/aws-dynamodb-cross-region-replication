@@ -1,0 +1,67 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "kinesis:DescribeStreamSummary",
+                "kinesis:DescribeStream",
+                "kinesis:GetRecords",
+                "kinesis:GetShardIterator",
+                "kinesis:ListShards",
+                "kinesis:SubscribeToShard"
+            ],
+            "Resource": "arn:aws:kinesis:ap-southeast-1:<Global account>:stream/ddb_replication_stream_sg",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "sqs:SendMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:GetQueueUrl"
+            ],
+            "Resource": "arn:aws:sqs:ap-southeast-1:<Global account>:ddbreplicatorsg",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "dynamodb:BatchGetItem",
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
+                "dynamodb:Query",
+                "dynamodb:GetItem",
+                "dynamodb:Scan",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:DeleteItem"
+            ],
+            "Resource": [
+                "arn:aws:dynamodb:ap-southeast-1:<Global account>:table/replicator_stats"
+            ],
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "dynamodb:BatchGetItem",
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
+                "dynamodb:Query",
+                "dynamodb:GetItem",
+                "dynamodb:Scan",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:DeleteItem"
+            ],
+            "Resource": [
+                "arn:aws:dynamodb:ap-southeast-1:<Global account>:table/user-sg"
+            ],
+            "Effect": "Allow"
+        },
+        {
+            "Action": "cloudwatch:PutMetricData",
+            "Resource": "*",
+            "Effect": "Allow"
+        }
+    ]
+}
