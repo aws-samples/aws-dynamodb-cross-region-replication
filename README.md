@@ -1,11 +1,11 @@
 中国区与Global区域DynamoDB table双向同步
-文档版本
-
-
+文档版本 1.0
+编写者   吕琳
 
 
 0. 架构
 在北京区域创建以下对象：
+
 
 * 2个DynamoDB，user-cn存储用户信息，数据将于新加坡区域的user-sg保持同步，另一个表replicator-stats表用来存储复制的变更记录数，以便监控复制进度
 * User-cn开启DynamoDB stream，用于记录user-cn表的所有变更
