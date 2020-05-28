@@ -18,7 +18,7 @@ Stream等托管服务实现中国区与Global区域DynamoDB表之间数据双向
 0. 架构
 -------
 
-![](media/7a5329155fd0cc26d97744b833f2d9bc.png)
+![](https://neptest.s3.cn-northwest-1.amazonaws.com.cn/ddb_architecuture.jpg)
 
 在北京区域创建以下对象：
 
