@@ -6,7 +6,14 @@
 | **编写者**   | 吕琳 |
 | **修改者**   |      |
 
-Amazon DynamoDB 是一种完全托管的 NoSQL 数据库服务，提供快速且可预测的性能，同时还能够实现无缝扩展。使用 DynamoDB，客户可以免除操作和扩展分布式数据库的管理工作负担，因而无需担心硬件预置、设置和配置、复制、软件修补或集群扩展等问题。目前Amazon DynamoDB  global table已经在中国区上线，为部署多区域、多主机数据库提供了完全托管的解决方案，但是global table只能用于北京和宁夏之间或者global区域之间的DynamoDB表同步，如果客户需要将中国区和global区域的DynamoDB表做双活复制同步，就需要客户自行构建解决方案，本文介绍了通过lambda、DynamoDB stream、Kinesis Stream等托管服务实现中国区与Global区域DynamoDB表之间数据双活复制同步，其中包含了架构、部署步骤以及监控方法，希望当您有类似需求的时候，能从中获得启发，助力业务发展。
+Amazon DynamoDB 是一种完全托管的 NoSQL
+数据库服务，提供快速且可预测的性能，同时还能够实现无缝扩展。使用
+DynamoDB，客户可以免除操作和扩展分布式数据库的管理工作负担，因而无需担心硬件预置、设置和配置、复制、软件修补或集群扩展等问题。目前Amazon
+DynamoDB global
+table已经在中国区上线，为部署多区域、多主机数据库提供了完全托管的解决方案，但是global
+table只能用于北京和宁夏之间或者global区域之间的DynamoDB表同步，如果客户需要将中国区和global区域的DynamoDB表做双活复制同步，就需要客户自行构建解决方案，本文介绍了通过lambda、DynamoDB
+stream、Kinesis
+Stream等托管服务实现中国区与Global区域DynamoDB表之间数据双活复制同步，其中包含了架构、部署步骤以及监控方法，希望当您有类似需求的时候，能从中获得启发，助力业务发展。
 
 0. 架构
 -------
@@ -29,7 +36,7 @@ Amazon DynamoDB 是一种完全托管的 NoSQL 数据库服务，提供快速且
     用于记录新加坡区域DynamoDB表user-sg的所有变更
 
 -   Lambda
-    函数replicator_ddb将北京区域中ddb_replication_stream_cn上的变更记录写入user-cn表
+    函数replicator_kinesis将北京区域中ddb_replication_stream_cn上的变更记录写入user-cn表
 
 -   Lambda 函数ddb_send_to_kinesis将从北京区域的DynamoDB
     stream中读取变更记录然后写入到新加坡区域的ddb_replication_stream_sg
@@ -56,7 +63,7 @@ Amazon DynamoDB 是一种完全托管的 NoSQL 数据库服务，提供快速且
     用于记录北京区域DynamoDB表user-cn的所有变更
 
 -   Lambda
-    函数replicator_ddb将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表
+    函数replicator_kinesis将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表
 
 -   Lambda 函数ddb_send_to_kinesis将从新加坡区域的DynamoDB
     stream中读取变更记录然后写入到北京区域的ddb_replication_stream_cn
@@ -75,7 +82,7 @@ Amazon DynamoDB 是一种完全托管的 NoSQL 数据库服务，提供快速且
     stream中读取变更记录，首先判断记录的last_updater_region是否是新加坡区域，如果是就丢弃，不是则写入到新加坡区域的ddb_replication_stream_sg，这一步将跨region，主要的网络延迟就在这一步
 
 -   新加坡区域的Lambda
-    replicator_ddb将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表，在写入时会通过condition判断变更记录的时间戳是否大于当前记录的变更时间戳，只有大于才会写入。
+    replicator_kinesis将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表，在写入时会通过condition判断变更记录的时间戳是否大于当前记录的变更时间戳，只有大于才会写入。
 
 -   新加坡区域的user-sg的变化记录又出现在DynamoDB
     stream中，并被新加坡区域的Lambda
@@ -458,20 +465,20 @@ arn:aws:iam::\<Global account\>:policy/ddb_send_to_kinesis_policy --profile sg
     [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)
     、AWSLambdaVPCAccessExecutionRole
 
-aws iam create-policy --policy-name replicator_ddb_policy --policy-document
-file:// iam_policy_example/replicator_ddb_policy_sg.json --profile sg
+aws iam create-policy --policy-name replicator_kinesis_policy --policy-document
+file:// iam_policy_example/replicator_kinesis_policy_sg.json --profile sg
 
-aws iam create-role --role-name replicator_ddb_role
+aws iam create-role --role-name replicator_kinesis_role
 --assume-role-policy-document file://
 iam_policy_example/lambda-role-trust-policy.json --profile sg
 
-aws iam attach-role-policy --role-name replicator_ddb_role --policy-arn
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
 arn:aws-cn:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
 
-aws iam attach-role-policy --role-name replicator_ddb_role --policy-arn
-arn:aws:iam::\<Global account\>:policy/replicator_ddb_policy
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
+arn:aws:iam::\<Global account\>:policy/replicator_kinesis_policy
 
-aws iam attach-role-policy --role-name replicator_ddb_role --policy-arn
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
 arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
 #### 北京区域
@@ -518,21 +525,21 @@ arn:aws-cn:iam::\<China account\>:policy/ddb_send_to_kinesis_policy --profile cn
     [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)
     、AWSLambdaVPCAccessExecutionRole
 
-aws iam create-policy --policy-name replicator_ddb_policy --policy-document
-file://iam_policy_example/replicator_ddb_policy_cn.json --profile cn
+aws iam create-policy --policy-name replicator_kinesis_policy --policy-document
+file://iam_policy_example/replicator_kinesis_policy_cn.json --profile cn
 
-aws iam create-role --role-name replicator_ddb_role
+aws iam create-role --role-name replicator_kinesis_role
 --assume-role-policy-document
 file://iam_policy_example/lambda-role-trust-policy.json --profile cn
 
-aws iam attach-role-policy --role-name replicator_ddb_role --policy-arn
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
 arn:aws-cn:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
 --profile cn
 
-aws iam attach-role-policy --role-name replicator_ddb_role --policy-arn
-arn:aws-cn:iam::\<China account\>:policy/replicator_ddb_policy --profile cn
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
+arn:aws-cn:iam::\<China account\>:policy/replicator_kinesis_policy --profile cn
 
-aws iam attach-role-policy --role-name replicator_ddb_role --policy-arn
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
 arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole --profile cn
 
 #### （可选）安装代理
@@ -710,24 +717,24 @@ group，向新加坡区代理服务器的EIP网段开放http/https接口
 ##### 创建lambda
 
 创建python lambda
-function命名为replicator_ddb，上传replicator_ddb的Lambda代码，代码请见
-[replicator_ddb.py](https://github.com/aws-samples/aws-dynamodb-cross-region-replication/blob/master/replicator_kinesis.py)
+function命名为replicator_kinesis，上传replicator_kinesis的Lambda代码，代码请见
+[replicator_kinesis.py](https://github.com/aws-samples/aws-dynamodb-cross-region-replication/blob/master/replicator_kinesis.py)
 
-zip replicator_ddb.zip replicator_ddb.py
+zip replicator_kinesis.zip replicator_kinesis.py
 
 aws lambda create-function --role arn:aws:iam::\<Global
-account\>:role/replicator_ddb_role --runtime python3.7 --function-name
-replicator_ddb --handler replicator_ddb.lambda_handler --zip-file
-fileb://replicator_ddb.zip --timeout 60 --region ap-southeast-1
+account\>:role/replicator_kinesis_role --runtime python3.7 --function-name
+replicator_kinesis --handler replicator_kinesis.lambda_handler --zip-file
+fileb://replicator_kinesis.zip --timeout 60 --region ap-southeast-1
 
 ##### 设置环境变量
 
-aws lambda update-function-configuration --function-name replicator_ddb
+aws lambda update-function-configuration --function-name replicator_kinesis
 --environment "Variables={TARGET_TABLE=user-sg}"
 
 ##### 创建触发器
 
-通过lambda页面选中replicator_ddb，而后选择add
+通过lambda页面选中replicator_kinesis，而后选择add
 trigger，下拉框中选择Kinesis，而后填写以下信息：
 
 -   下拉菜单中选取ddb_replication_stream_sg
@@ -745,24 +752,24 @@ trigger，下拉框中选择Kinesis，而后填写以下信息：
 ##### 创建lambda
 
 创建python lambda
-function命名为replicator_ddb，上传replicator_ddb的Lambda代码，代码请见
-[replicator_ddb.py](https://github.com/aws-samples/aws-dynamodb-cross-region-replication/blob/master/replicator_kinesis.py)
+function命名为replicator_kinesis，上传replicator_kinesis的Lambda代码，代码请见
+[replicator_kinesis.py](https://github.com/aws-samples/aws-dynamodb-cross-region-replication/blob/master/replicator_kinesis.py)
 
-zip replicator_ddb.zip replicator_ddb.py
+zip replicator_kinesis.zip replicator_kinesis.py
 
 aws lambda create-function --role arn:aws-cn:iam::\<China
-account\>:role/replicator_ddb_role --runtime python3.7 --function-name
-replicator_ddb --handler replicator_ddb.lambda_handler --zip-file
-fileb://replicator_ddb.zip --timeout 60 --region cn-north-1
+account\>:role/replicator_kinesis_role --runtime python3.7 --function-name
+replicator_kinesis --handler replicator_kinesis.lambda_handler --zip-file
+fileb://replicator_kinesis.zip --timeout 60 --region cn-north-1
 
 ##### 设置环境变量
 
-aws lambda update-function-configuration --function-name replicator_ddb
+aws lambda update-function-configuration --function-name replicator_kinesis
 --environment "Variables={TARGET_TABLE=user-cn}"
 
 ##### 创建触发器
 
-通过lambda页面选中replicator_ddb，而后选择add
+通过lambda页面选中replicator_kinesis，而后选择add
 trigger，下拉框中选择Kinesis，而后填写以下信息：
 
 -   下拉菜单中选取ddb_replication_stream_cn
@@ -798,3 +805,121 @@ trigger，下拉框中选择Kinesis，而后填写以下信息：
 
 为了模拟两个region同时有大量本地写DynamoDB的场景，我们在北京和新加坡的压测机上同时运行并发加载测试。
 
+在运行过程中，我们可以通过监控DynamoDB表的Write
+Capacity图表，可以看到WCU达到了500以上。值得注意的是，在双向复制的测试中，既有压测进程在写入DynamoDB表，同时有lambda在复制来自对端的数据，因此观察到的WCU是两者的叠加。如果是同样测试条件下做单向复制的测试，那会观察到WCU大约是前者的一半。
+
+![](media/f6d4746f7ccf3d26625b6b1608a95468.png)
+
+### 2.3、监控lambda
+
+通过lambda console的monitor对lambda运行情况进行监控，以下几个指标要关注。
+
+以下截图的产生背景是：在中国区代理EC2上运行seq 5 \| parallel -N0 --jobs 0
+"python3 load_items.py -n 20000 -r
+cn"也就是用5个进程模拟向user-cn表插入记录，每个进程插入20000条，总计100000条记录，最终执行时间大概是5分:29秒，实际生产环境中的监控图可能有很大变化。
+
+#### Invocations
+
+–
+函数代码的执行次数，包括成功的执行和导致出现函数错误的执行。如果调用请求受到限制或导致出现[调用错误](https://docs.aws.amazon.com/zh_cn/lambda/latest/dg/API_Invoke.html#API_Invoke_Errors)，则不会记录调用。这等于计费请求的数目。这里可以看到中国区ddb_send_to_kinesis的调用次数明显比新加坡区replicator_kinesis调用次数高，可以通过cloudwatch
+logs查看2个lambda运行日志找到原因，我们可以看到ddb_send_to_kinesis因为是跨region写入记录，所以网络延迟导致每批次处理记录要比同region的replicator_kinesis的每批次处理记录要少得多，故而相应地调用次数也要多得多。
+
+**中国区ddb_send_to_kinesis**
+
+![](media/2f0fbd4835414f015e68edbb5678ecec.png)
+
+**新加坡区replicator_kinesis**
+
+![](media/2ef46292b45f6c979ba1d263129aa6bc.png)
+
+#### Duration
+
+函数代码处理事件所花费的时间量。对于由函数实例处理的第一个事件，该时间量包括[初始化时间](https://docs.aws.amazon.com/zh_cn/lambda/latest/dg/gettingstarted-features.html#gettingstarted-features-programmingmodel)。调用的计费持续时间是已舍入到最近的
+100 毫秒的 Duration
+值。因为ddb_send_to_kinesis是跨region写入记录，所以网络延迟导致其花费时间要比replicator_kinesis时间长一些。
+
+**中国区ddb_send_to_kinesis**
+
+![](media/0735644bfb78e37511ab5b657d2f1642.png)
+
+**新加坡区replicator_kinesis**
+
+![](media/566e6e34cfa51e389ecc1f1b40ae46c2.png)
+
+#### Error count and success rate (%)
+
+Errors – 导致出现函数错误的调用的次数。函数错误包括您的代码所引发的异常和 Lambda
+运行时所引发的异常。运行时返回因超时和配置错误等问题导致的错误。错误率即通过
+Errors 的值除以 Invocations
+的值计算而得。我们可以看到ddb_send_to_kinesis因为是跨region写入记录，所以网络可能导致部分失败。
+
+**中国区ddb_send_to_kinesis**
+
+![](media/a3a9befa1f0d3ff900eee8411487945d.png)
+
+**新加坡区replicator_kinesis**
+
+![](media/f1aecd4ec206f22d0a114af363e37a32.png)
+
+#### IteratorAge
+
+对于从流读取的[事件源映射](https://docs.aws.amazon.com/zh_cn/lambda/latest/dg/invocation-eventsourcemapping.html)，为事件中最后一条记录的期限。期限是指流接收记录的时间到事件源映射将事件发送到函数的时间之间的时间量。我们可以看到ddb_send_to_kinesis因为是跨region写入记录有网络延迟，所以IteratorAge会比replicator_kinesis长一些。
+
+**中国区ddb_send_to_kinesis**
+
+![](media/9e184ad0f79cd62bb23d5b48e4e40c82.png)
+
+**新加坡区replicator_kinesis**
+
+![](media/b24c5053640524090dd4ceb52c1cc1c8.png)
+
+#### Concurrent executions
+
+正在处理事件的函数实例的数目。如果此数目达到区域的[并发执行限制](https://docs.aws.amazon.com/zh_cn/lambda/latest/dg/gettingstarted-limits.html)或您在函数上配置的[预留并发限制](https://docs.aws.amazon.com/zh_cn/lambda/latest/dg/configuration-concurrency.html)，则其他调用请求将受到限制。我们可以看到ddb_send_to_kinesis因为源头DDB
+stream是多个shard（因为源DDB是on
+demand且记录数较多），所以他并发有40个，而replicator_kinesis的源头kinesis
+stream我们只有一个shard所以并发只有10个。
+
+**中国区ddb_send_to_kinesis**
+
+![](media/ffbed8ea75df45ac0df40c051592cbc3.png)
+
+**新加坡区replicator_kinesis**
+
+![](media/dd2ae0aaad7a2f4f200a3b771a256d46.png)
+
+### 2.4、通过replicator_stats记录复制数量
+
+在本实验中，为了方便查询复制记录的总数，每当load_items.py向名为user-\*的DynamoDB表中加载记录都会向本region的loader_stats表中记录加载记录数，此后每当对端region的lambda
+[replicator_kinesis]向同region名为user-\*的DynamoDB表中成功写入记录时就会累加在replicator_stats表的replicated_count值，故而可以通过比较replicator_stats表的replicated_count值与load_items中插入的记录总数来掌握整个复制进度。
+
+譬如我在中国区压测机上运行seq 5 \| parallel -N0 --jobs 0 "python3 load_items.py
+-n 20000 -r
+cn"也就是用5个进程模拟向user-cn表插入记录，每个进程插入20000条，总计100000条记录，可以在中国区的loader_stats表中看到插入条目统计值为100000。并且，我们从北京区的loader_stats以及新加坡区的replicator_stats中可以看到加载和复制完成记录数。
+
+![](media/c889c46b68f4ed4584adfebc4c1f7f51.png)
+
+![](media/ccb63575eda6b8a74cc40a99ab734eb1.png)
+
+### 2.5、通过cloudwatch监控metrics
+
+在通过load_items.py向DynamoDB表中加载数据时会向cloudwatch中输出metrics
+Total_loaded，该metrics会记录每个load_items.py加载数据的总数，通过cloudwatch的console我们可以图形化展示该metrics，可以在CloudWatch
+Metrics-\>DDB-Loader-\>loader找到这个图表。下图选取的是10秒周期内Total_loaded的最大值（因为该值总是单调递增），我们可以从中掌握加载数据的情况。
+
+![](media/e5306f2a5ba8a53f5716d2774271045e.png)
+
+在通过replicator_kinesis
+lambda向DynamoDB表中加载数据时同样会向cloudwatch中输出2个metrics ，其中：
+
+-   Total_replicated 记录了向目标DynamoDB表中复制数据的总量
+
+-   Updated_count记录了每次调用lambda复制数据的数量
+
+过cloudwatch的console我们可以图形化展示2个metrics，下图Total_replicated选择30秒周期内的最大值，我们可以从中掌握复制数据的情况，而Updated_count选择总数可以从曲线中判断复制速率是否稳定，如果波动较大，要考虑是否网络或者程序出现问题。
+
+![](media/2668ee0c36cc589845d0ae458e228cdb.png)
+
+![](media/5527f25e955bdb8d7d52e92caf9de0fe.png)
+
+另外，我们可以比较Total_loaded和Total_replicated的时间点来分析复制的时延。在这个实验中，压测机在07：31：42UTC时间完成测试，Total_loaded达到100K条，而复制端在07：32：16UTC时间复制完成，达到100K条，总体时延34秒。
