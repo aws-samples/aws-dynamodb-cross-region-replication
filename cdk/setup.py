@@ -36,7 +36,7 @@ setuptools.setup(
 
         "Intended Audience :: Developers",
 
-        "License :: OSI Approved :: Apache Software License",
+        "License :: MIT-0",
 
         "Programming Language :: JavaScript",
         "Programming Language :: Python :: 3 :: Only",
