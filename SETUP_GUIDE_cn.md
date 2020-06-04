@@ -1,17 +1,19 @@
-DynamoDB Bi-directional Replication Solution
+中国区与Global区域DynamoDB table双向同步
 ========================================
 
-Although DynamoDB service provides native global table feature for replication across region, there is no builtin solution for replication between AWS partitions, e.g. between AWS China regions and global (commercial) regions. 
+| **文档版本** | 1.0  |
+|--------------|------|
+| **编写者**   | 吕琳 |
+| **修改者**   |      |
 
-### Feature
-
-- Active-active tables to sync up almost real-time
-- Serverless solution
-- Builtin failure management in handling transfer failure over Internet
-- Works for either transfer over Internet or private network
-- Replication status monitoring in Cloudwatch metrics
-- Provides load testing example
-- Both step-by-step manual setup guide and automated deployment with CDK
+Amazon DynamoDB 是一种完全托管的 NoSQL
+数据库服务，提供快速且可预测的性能，同时还能够实现无缝扩展。使用
+DynamoDB，客户可以免除操作和扩展分布式数据库的管理工作负担，因而无需担心硬件预置、设置和配置、复制、软件修补或集群扩展等问题。目前Amazon
+DynamoDB global
+table已经在中国区上线，为部署多区域、多主机数据库提供了完全托管的解决方案，但是global
+table只能用于北京和宁夏之间或者global区域之间的DynamoDB表同步，如果客户需要将中国区和global区域的DynamoDB表做双活复制同步，就需要客户自行构建解决方案，本文介绍了通过lambda、DynamoDB
+stream、Kinesis
+Stream等托管服务实现中国区与Global区域DynamoDB表之间数据双活复制同步，其中包含了架构、部署步骤以及监控方法，希望当您有类似需求的时候，能从中获得启发，助力业务发展。
 
 0. 架构
 -------
