@@ -76,7 +76,7 @@ def lambda_handler(event, context):
         try:
             if 'event_name' in event_dict and event_dict['event_name'] in ['INSERT', 'MODIFY']:
                 new_item = event_dict['new_image']
-                #print('New/updated item:' + str(new_item))
+                # print('New/updated item:' + str(new_item))
                 item_dict = {'TableName': os.environ['TARGET_TABLE'],
                                 'Item': new_item,
                                 'ConditionExpression': 'attribute_not_exists(PK) OR last_update_timestamp < :cur_time_stamp',
@@ -100,7 +100,7 @@ def lambda_handler(event, context):
 
         except ClientError as error:
            if error.response['Error']['Code'] == 'ConditionalCheckFailedException':
-               #print("Stale item. Discarding the change.")
+               # print("Stale item. Discarding the change.")
                stale_item += 1
            else:
                print("Error message: {}".format(error.response['Error']['Code']))
