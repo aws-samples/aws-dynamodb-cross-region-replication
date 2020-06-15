@@ -22,7 +22,7 @@ Although DynamoDB service provides native global table feature for replication a
 
 ### Architecture - How it works
 
-![](https://neptest.s3.cn-northwest-1.amazonaws.com.cn/ddb_architecuture.jpg)
+![image-20200424212120321](image/image-20200424212120321.png)
 
 The solution is based on DynamoDB stream which captures all new/ update/delete to DynamoDB items. A Lambda function '**send_to_kinesis**' 
 
@@ -38,7 +38,7 @@ In the target region, the Lambda function '**replicator**'
 
 ### Manual Setup
 
-See [Setup Guide (Chinese version)]([SETUP_GUIDE_cn.md])
+See [Setup Guide (Chinese version)](SETUP_GUIDE_cn.md)
 
 ### Automated Setup with AWS CDK (Cloud Development Kit)
 
