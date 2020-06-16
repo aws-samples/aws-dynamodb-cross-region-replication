@@ -232,8 +232,8 @@ class ReplicatorStack(core.Stack):
 
 
 app = core.App()
-for region in region_list:
 
+for region in region_list:
     SourceDynamoStack(app, "source-dynamo-"+region,
                       key_name = KEY_NAME[region],
                       table_name=TABLE_NAME[region],
@@ -244,6 +244,5 @@ for region in region_list:
                     )
     ReplicatorStack(app, "replicator-"+region, env={'region':region},
                     target_table_name = TABLE_NAME[region])
-
 
 app.synth()
