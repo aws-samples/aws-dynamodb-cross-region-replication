@@ -167,8 +167,13 @@ class SourceDynamoStack(core.Stack):
                                                                         parameter_name=secret_key_parameter_name,
                                                                          version=1)
         sk.grant_read(send_to_kinesis_lambda)
-        core.CfnOutput(self, "Output",
+        # Output public DNS name of the loader
+        core.CfnOutput(self, "loader_instance",
                        value=loader_instance.instance_public_dns_name)
+        core.CfnOutput(self, "source_table",
+                       value=source_ddb_table.table_name)
+        core.CfnOutput(self, "source_stats_table",
+                       value=source_loader_stats_table.table_name)
 
 
 class ReplicatorStack(core.Stack):
@@ -178,10 +183,12 @@ class ReplicatorStack(core.Stack):
 
         super().__init__(scope, _id, **new_kwargs)
 
-        target_table_name = kwargs['target_table_name']
+        # Create staging Kinesis Data Stream, set to 1 shard in this sample code
         kinesis_stream = kinesis.Stream(self, STREAM_NAME,
                                         stream_name=STREAM_NAME,
                                         shard_count=1)
+        # Create replicator lambda function that consumes the Kinesis stream and writes to target DDB table
+        target_table_name = kwargs['target_table_name']
         dlq_sqs = sqs.Queue(self, 'replicator_failure_Q')
         replicator_lambda = lambda_.Function(self, 'replicator_kinesis',
                                                      code=lambda_.Code.asset("../lambda_replicator"),
@@ -203,6 +210,16 @@ class ReplicatorStack(core.Stack):
         ))
         target_table = ddb.Table.from_table_name(self,target_table_name,target_table_name)
         target_table.grant_read_write_data(replicator_lambda)
+
+        # The replicator lambda will put metrics to Cloudwatch
+        put_metrics_policy = PolicyStatement(
+            actions=['cloudwatch:PutMetricData'],
+            effect=Effect.ALLOW,
+            resources=['*']
+        )
+        replicator_lambda.add_to_role_policy(put_metrics_policy)
+
+        # Create replicator-stats table for statistics of replicator
         replicator_stats_table = ddb.Table(self, REPLICATOR_STATS_TABLE_NAME,
                                            table_name=REPLICATOR_STATS_TABLE_NAME,
                                            partition_key=ddb.Attribute(name="PK", type=ddb.AttributeType.STRING),
@@ -210,12 +227,8 @@ class ReplicatorStack(core.Stack):
                                            removal_policy=RemovalPolicy.DESTROY
                                            )
         replicator_stats_table.grant_read_write_data(replicator_lambda)
-        put_metrics_policy = PolicyStatement(
-            actions=['cloudwatch:PutMetricData'],
-            effect=Effect.ALLOW,
-            resources=['*']
-        )
-        replicator_lambda.add_to_role_policy(put_metrics_policy)
+        core.CfnOutput(self, "replicator_stats_table",
+                       value=replicator_stats_table.table_name)
 
 
 app = core.App()
