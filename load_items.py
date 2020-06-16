@@ -65,47 +65,23 @@ if __name__ == "__main__":
     retries = 0  # used for backoff function
     RETRY_EXCEPTIONS = ('ProvisionedThroughputExceededException',
                         'ThrottlingException')
+
     parser = argparse.ArgumentParser()
     parser.add_argument('-n', type=int, default=10000, help='Number of items to generate and write to DynamoDB table')
-    parser.add_argument('-r', type=str, default='sg', choices=['cn', 'sg', 'us'], help='Region of source DynamoDB table')
+    parser.add_argument('-r', required=True, default='ap-southeast-1', help='Region of source DynamoDB table')
     parser.add_argument('-b', action='store_true', help='Write to DynamoDB table using batched write for higher load')
-    parser.add_argument('-s', action='store_true', help='Reset the statistics table replicator_stats in target region')
-    parser.add_argument('-t', type=str, default='cn', choices=['cn', 'sg', 'us'], help='Region of target DynamoDB table')
+    parser.add_argument('-t', required=True, help='DynamoDB table to load on')
     args = parser.parse_args()
     count = args.n
-    region = args.r
+    region_name = args.r
     batched = args.b
-    reset_stats = args.s
-    target_region = args.t
+    table_name = args.t
 
-    PROFILE = {'cn': 'cn',
-               'us':'default',
-               'sg': 'default'
-               }
-    TABLE = {'cn': 'user-cn',
-             'sg': 'user-sg',
-             'us': 'user-us'
-             }
-    REGION = {'cn': 'cn-north-1',
-              'us': 'us-west-2',
-              'sg': 'ap-southeast-1'
-              }
-    region_name = REGION[region]
-    table_name = TABLE[region]
-    profile_name = PROFILE[region]
-
-    target_region_name = REGION[target_region]
-    target_profile_name = PROFILE[target_region]
-
-    session = boto3.Session(profile_name=profile_name, region_name=region_name)
+    session = boto3.Session(region_name=region_name)
     ddb_source = session.resource('dynamodb')
     cloudwatch = session.client('cloudwatch')
     loader_stats_table = ddb_source.Table('loader_stats')
-    if reset_stats:
-        target_session = boto3.Session(profile_name = target_profile_name,
-                                        region_name = target_region_name)
-        target_ddb_table = target_session.resource('dynamodb').Table('replicator_stats')
-        target_ddb_table.put_item(Item = {'PK':'replicated_count', 'cnt':Decimal(0)})
+
 
     start_time = datetime.now()
     source_table = ddb_source.Table(table_name)
@@ -137,7 +113,7 @@ if __name__ == "__main__":
                 update_stats_metrics(loader_stats_table,cloudwatch,100)
 
     print("Test done for {}".format(count))
-    #update_stats_metrics(loader_stats_table,cloudwatch,count)
+
     end_time = datetime.now()
     duration = end_time - start_time
     print("Test from {} to {}. Run time: {}".format(str(start_time), str(end_time), str(duration)))
