@@ -42,7 +42,7 @@ See [Setup Guide (Chinese version)](SETUP_GUIDE_cn.md)
 
 ### Automated Setup with AWS CDK (Cloud Development Kit)
 
-TBD
+See [CDK set up guide](cdk/README.md)
 
 ### License
 

@@ -1,6 +1,6 @@
-## Automated Deployment with Cloud Development Kit (CDK)
+# Automated Deployment with Cloud Development Kit (CDK)
 
-### Prerequisite
+## Prerequisite
 
 - AWS global region account access (and IAM Access Key and Secret Key)
 - AWS China region account access (and IAM Access Key and Secret Key)
@@ -8,15 +8,15 @@
 - AWS CLI
 - SSH key pair in both accounts (used to access load testing machine)
 
-### Setup
+## Setup
 
-#### Download the git repository
+### Download the git repository
 
 ```bash
 git clone https://github.com/aws-samples/aws-dynamodb-cross-region-replication.git
 ```
 
-#### Put AKSK in Parameter Store
+### Put AKSK in Parameter Store
 
 Since the AWS commercial region and China region are of different account systems, **AKSK is needed to access resources in the target region and will be stored as secure string in SSM.**
 
@@ -31,7 +31,7 @@ aws ssm put-parameter --name /DDBReplication/Table_A/AccessKey --value <access_k
 aws ssm put-parameter --name /DDBReplication/Table_A/SecretKey --value <secret_key> --type SecureString --profile $PROFILE_B
 ```
 
-#### Update the parameters in cdk/app.py
+### Update the parameters in cdk/app.py
 
 Replace the parameters in cdk/app.py
 
@@ -66,7 +66,7 @@ KEY_NAME = {
     }
 ```
 
-#### Deploy CDK stacks
+### Deploy CDK stacks
 
 There are 2 CDK stacks for both regions (total 4 stacks): 
 
@@ -81,7 +81,7 @@ cdk deploy <stack_name> --profile $PROFILE_A or $PROFILE_B
 # In output of the stack, take note of the loader instance DNS name
 ```
 
-#### Initialize the statistics table
+### Initialize the statistics table
 
 Set intial count in both loader_stats and replicator_stats table
 
@@ -92,7 +92,7 @@ aws dynamodb put-item --table-name replicator_stats --item '{ "PK": {"S":"replic
 aws dynamodb put-item --table-name replicator_stats --item '{ "PK": {"S":"replicated_count"}, "cnt": {"N":"0"}}' --profile $PROFILE_B
 ```
 
-#### Load test
+### Load test
 
 Install dependancies in loader instance
 
@@ -107,12 +107,12 @@ echo "source ${HOME}/my_app/env/bin/activate" >> ${HOME}/.bashrc
 source ~/.bashrc
 pip install faker uuid
 pip install --upgrade awscli
-git clone https://github.com/aws-samples/aws-dynamodb-cross-region-replication.git
 ```
 
 Load test with the loader.py
 
 ```bash
+git clone https://github.com/aws-samples/aws-dynamodb-cross-region-replication.git
 cd aws-dynamodb-cross-region-replication
 python3 load_items.py -t user_cdk-cn-north-1 -r cn-north-1 -n 10000
 ```
