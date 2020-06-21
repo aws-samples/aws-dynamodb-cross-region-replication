@@ -88,7 +88,7 @@ Set intial count in both loader_stats and replicator_stats table
 ```bash
 aws dynamodb put-item --table-name loader_stats --item '{ "PK": {"S":"loaded_count"}, "cnt": {"N":"0"}}' --profile $PROFILE_A
 aws dynamodb put-item --table-name loader_stats --item '{ "PK": {"S":"loaded_count"}, "cnt": {"N":"0"}}' --profile $PROFILE_B
-aws dynamodb put-item --table-name replicator_stats --item '{ "PK": {"S":"replicated_count"}, "cnt": {"N":"0"}}' ---profile $PROFILE_A
+aws dynamodb put-item --table-name replicator_stats --item '{ "PK": {"S":"replicated_count"}, "cnt": {"N":"0"}}' --profile $PROFILE_A
 aws dynamodb put-item --table-name replicator_stats --item '{ "PK": {"S":"replicated_count"}, "cnt": {"N":"0"}}' --profile $PROFILE_B
 ```
 
