@@ -109,7 +109,7 @@ pip install faker uuid
 pip install --upgrade awscli
 ```
 
-Load test with the loader.py
+Load test with the load_items.py. The tool generates fake user profile items in the table and also updates in loader_stats the number of items it has loaded. To simulate data ingestion in both regions, run load_items.py simultaneously on loader instance in both regions.
 
 ```bash
 git clone https://github.com/aws-samples/aws-dynamodb-cross-region-replication.git
@@ -117,3 +117,28 @@ cd aws-dynamodb-cross-region-replication
 python3 load_items.py -t user_cdk-cn-north-1 -r cn-north-1 -n 10000
 ```
 
+To see helper on load_items.py,
+
+```bash
+python3 load_items.py -h
+usage: load_items.py [-h] [-n N] -r R [-b] -t T
+
+optional arguments:
+  -h, --help  show this help message and exit
+  -n N        Number of items to generate and write to DynamoDB table
+  -r R        Region of source DynamoDB table
+  -b          Write to DynamoDB table using batched write for higher load
+  -t T        DynamoDB table to load on
+```
+
+## Monitoring
+
+The CDK setup will create 3 metrics in both regions below and the recommended statistics:
+
+| Metric Name      | Where to find                                  | Recommended statistics  |
+| ---------------- | ---------------------------------------------- | ----------------------- |
+| Total_loaded     | Cloudwatch metrics->DDB-Loader->loader         | Maximum over 10 seconds |
+| Total_replicated | Cloudwatch metrics->DDB-Replicator->replicator | Maximum over 10 seconds |
+| Updated_count    | Cloudwatch metrics->DDB-Replicator->replicator | Sum over 10 seconds     |
+
+To find out replication lag of the test, compare the Total_loaded in Region A vs. Total_replicated metric in Region B. The lag is the lag between the two metric timeline.
