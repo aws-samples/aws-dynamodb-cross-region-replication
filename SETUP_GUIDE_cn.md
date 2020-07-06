@@ -1,24 +1,5 @@
-中国区与Global区域DynamoDB table双向同步
+手动部署
 ========================================
-
-| **文档版本** | 1.0  |
-|--------------|------|
-| **编写者**   | 吕琳 |
-| **修改者**   |      |
-
-Amazon DynamoDB 是一种完全托管的 NoSQL
-数据库服务，提供快速且可预测的性能，同时还能够实现无缝扩展。使用
-DynamoDB，客户可以免除操作和扩展分布式数据库的管理工作负担，因而无需担心硬件预置、设置和配置、复制、软件修补或集群扩展等问题。目前Amazon
-DynamoDB global
-table已经在中国区上线，为部署多区域、多主机数据库提供了完全托管的解决方案，但是global
-table只能用于北京和宁夏之间或者global区域之间的DynamoDB表同步，如果客户需要将中国区和global区域的DynamoDB表做双活复制同步，就需要客户自行构建解决方案，本文介绍了通过lambda、DynamoDB
-stream、Kinesis
-Stream等托管服务实现中国区与Global区域DynamoDB表之间数据双活复制同步，其中包含了架构、部署步骤以及监控方法，希望当您有类似需求的时候，能从中获得启发，助力业务发展。
-
-0. 架构
--------
-
-![](https://neptest.s3.cn-northwest-1.amazonaws.com.cn/ddb_architecuture.jpg)
 
 在北京区域创建以下对象：
 
@@ -32,20 +13,15 @@ Stream等托管服务实现中国区与Global区域DynamoDB表之间数据双活
 
 -   User-cn开启DynamoDB stream，用于记录user-cn表的所有变更
 
--   Kinesis 流ddb_replication_stream_cn
-    用于记录新加坡区域DynamoDB表user-sg的所有变更
-
--   Lambda
-    函数replicator_kinesis将北京区域中ddb_replication_stream_cn上的变更记录写入user-cn表
-
--   Lambda 函数ddb_send_to_kinesis将从北京区域的DynamoDB
-    stream中读取变更记录然后写入到新加坡区域的ddb_replication_stream_sg
-
+-   Kinesis 流ddb_replication_stream_cn：用于记录新加坡区域DynamoDB表user-sg的所有变更
+    
+-   Lambda函数replicator_kinesis：将北京区域中ddb_replication_stream_cn上的变更记录写入user-cn表
+    
+-   Lambda 函数ddb_send_to_kinesis：将从北京区域的DynamoDB stream中读取变更记录然后写入到新加坡区域的ddb_replication_stream_sg
+    
 -   Parameter store中存储新加坡区域IAM用户的AK/SK
 
--   如果客户有direct
-    connect，可以创建VPC并在VPC内部署一个代理服务器，lambda也部署在VPC内，令lambda利用新加坡区域的代理服务器进而利用direct
-    connect，从而减少网络延迟并提高网络稳定性
+-   如果客户有direct connect，可以创建VPC并在VPC内部署一个代理服务器，lambda也部署在VPC内，令lambda利用新加坡区域的代理服务器进而利用direct connect，从而减少网络延迟并提高网络稳定性
 
 在新加坡区域创建以下对象：
 
@@ -75,18 +51,13 @@ Stream等托管服务实现中国区与Global区域DynamoDB表之间数据双活
 
 因为对象较多，我们以北京区域DynamoDB表user-cn中的变更数据向新加坡区域同步过程为例，将整个数据流梳理一遍，从新加坡DynamoDB表user-sg同步数据到user-cn的过程类似将不再赘述
 
--   当数据写入北京区域DynamoDB表user-cn后，变更记录首先会写入北京区域的DynamoDB
-    stream
-
--   北京区域的Lambda ddb_send_to_kinesis将从北京区域的DynamoDB
-    stream中读取变更记录，首先判断记录的last_updater_region是否是新加坡区域，如果是就丢弃，不是则写入到新加坡区域的ddb_replication_stream_sg，这一步将跨region，主要的网络延迟就在这一步
-
--   新加坡区域的Lambda
-    replicator_kinesis将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表，在写入时会通过condition判断变更记录的时间戳是否大于当前记录的变更时间戳，只有大于才会写入。
-
--   新加坡区域的user-sg的变化记录又出现在DynamoDB
-    stream中，并被新加坡区域的Lambda
-    ddb_send_to_kinesis读取，而后判断记录的last_updater_region是否是北京区域，因为该变化恰恰是来自北京，所以该记录被丢弃，从而避免了循环复制。
+-   当数据写入北京区域DynamoDB表user-cn后，变更记录首先会写入北京区域的DynamoDB stream
+    
+-   北京区域的Lambda ddb_send_to_kinesis将从北京区域的DynamoDB stream中读取变更记录，首先判断记录last_updater_region是否是新加坡区域，如果是就丢弃，不是则写入到新加坡区域的ddb_replication_stream_sg，这一步将跨region，主要的网络延迟就在这一步
+    
+-   新加坡区域的Lambda replicator_kinesis将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表，在写入时会通过condition判断变更记录的时间戳是否大于当前记录的变更时间戳，只有大于才会写入。
+    
+-   新加坡区域的user-sg的变化记录又出现在DynamoDB stream中，并被新加坡区域的Lambda ddb_send_to_kinesis读取，而后判断记录的last_updater_region是否是北京区域，因为该变化恰恰是来自北京，所以该记录被丢弃，从而避免了循环复制。
 
 部署环境
 --------
@@ -104,283 +75,152 @@ Stream等托管服务实现中国区与Global区域DynamoDB表之间数据双活
 
 #### 安装软件
 
-1、因为后续操作中会大量使用AWS
-CLI，故而需要在2个压测服务器上确认安装python3等软件并升级AWS
-CLI到最新版本，以ec2-user用户运行如下命令：
+1、因为后续操作中会大量使用AWS CLI，故而需要在2个压测服务器上确认安装python3等软件并升级AWS CLI到最新版本，以ec2-user用户运行如下命令：
 
-yum list installed \| grep -i python3
-
-sudo yum install python36 -y
-
+```bash
+yum list installed | grep -i python3
+sudo yum install python3 -y
 python3 -m venv my_app/env
-
-source \~/my_app/env/bin/activate
-
+source ~/my_app/env/bin/activate
 pip install pip --upgrade
-
 pip install boto3
-
-echo "source \${HOME}/my_app/env/bin/activate" \>\> \${HOME}/.bashrc
-
-source \~/.bashrc
-
+echo "source ${HOME}/my_app/env/bin/activate" >> ${HOME}/.bashrc
+source ~/.bashrc
 pip install faker uuid
-
-pip install --upgrade awscli/
+pip install --upgrade awscli
+```
 
 2、后续模拟加载数据到DynamoDB表的脚本会用到parallel，故而也需要安装parallel
 
+```bash
 http://git.savannah.gnu.org/cgit/parallel.git/tree/README
-
 wget https://ftpmirror.gnu.org/parallel/parallel-20200322.tar.bz2
-
 wget https://ftpmirror.gnu.org/parallel/parallel-20200322.tar.bz2.sig
-
 gpg parallel-20200322.tar.bz2.sig
-
-bzip2 -dc parallel-20200322.tar.bz2 \| tar xvf -
-
+bzip2 -dc parallel-20200322.tar.bz2 | tar xvf -
 cd parallel-20200322
-
 ./configure && make && sudo make install
+```
 
 #### 配置profile
 
-接下来在2个压测服务器上通过aws configure --profile
-分别配置相应中国区域和Global区域IAM用户的AK/SK，以便后续能顺利运行AWS
-CLI命令。请生成分别名为cn和sg的profile，以便后面加载记录时使用。
+接下来在2个压测服务器上通过aws configure --profile分别配置相应中国区域和Global区域IAM用户的AK/SK，以便后续能顺利运行AWS CLI命令。
 
 ### 1.2 建表
 
 #### 新加坡区域
 
-在新加坡区域建立DynamoDB表user-sg，并开启DynamoDB
-stream（NEW_AND_OLD_IMAGES类型）,设置容量模式为On-Demand。再创建loader_stats和replicator_stats表用来记录更新记录以便比对数据同步进度。
+在新加坡区域建立DynamoDB表user-sg，并开启DynamoDB stream（NEW_AND_OLD_IMAGES类型）,设置容量模式为On-Demand。再创建loader_stats和replicator_stats表用来记录更新记录以便比对数据同步进度。
 
 在新加坡区域的压测服务器上通过json创建DynamoDB表，先编写json如下，读者在工作中可以按照实际情况修改相关配置。
 
+```json
 vim user-sg.json
-
 {
-
-"AttributeDefinitions": [
-
-{
-
-"AttributeName": "PK",
-
-"AttributeType": "S"
-
+        "AttributeDefinitions": [
+            {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+            }
+        ],
+       "BillingMode": "PAY_PER_REQUEST",
+        "TableName": "user-sg",
+        "StreamSpecification": {
+            "StreamViewType": "NEW_AND_OLD_IMAGES",
+            "StreamEnabled": true
+        },
+        "KeySchema": [
+            {
+                "KeyType": "HASH",
+                "AttributeName": "PK"
+            }
+        ]
 }
-
-],
-
-"BillingMode": "PAY_PER_REQUEST",
-
-"TableName": "user-sg",
-
-"StreamSpecification": {
-
-"StreamViewType": "NEW_AND_OLD_IMAGES",
-
-"StreamEnabled": true
-
-},
-
-"KeySchema": [
-
-{
-
-"KeyType": "HASH",
-
-"AttributeName": "PK"
-
-}
-
-]
-
-}
+```
 
 然后用命令创建DynamoDB表user-sg
 
-aws dynamodb create-table --cli-input-json <file://user-sg.json> --profile sg
+```bash
+aws dynamodb create-table --cli-input-json file://user-sg.json
+```
 
 最后可以验证
 
-aws dynamodb describe-table --table-name user-sg --profile sg
+```bash
+aws dynamodb describe-table --table-name user-sg
+```
 
-然后用类似方法创建DynamoDB表replicator_stats和loader_stats并且初始化表中的统计值
+用类似方法创建DynamoDB表replicator_stats和loader_stats并且初始化表中的统计值
 
+```json
 vim replicator_stats.json
-
 {
-
-"AttributeDefinitions": [
-
-{
-
-"AttributeName": "PK",
-
-"AttributeType": "S"
-
+        "AttributeDefinitions": [
+            {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+            }
+        ],
+       "BillingMode": "PAY_PER_REQUEST",
+        "TableName": "replicator_stats",
+        "KeySchema": [
+            {
+                "KeyType": "HASH",
+                "AttributeName": "PK"
+            }
+        ]
 }
-
-],
-
-"BillingMode": "PAY_PER_REQUEST",
-
-"TableName": "replicator_stats",
-
-"KeySchema": [
-
-{
-
-"KeyType": "HASH",
-
-"AttributeName": "PK"
-
-}
-
-]
-
-}
-
-aws dynamodb create-table --cli-input-json <file://replicator_stats.json>
-
-aws dynamodb put-item --table-name replicator_stats --item '{ "PK":
-{"S":"replicated_count"}, "cnt": {"N":"0"}}'
-
+aws dynamodb create-table --cli-input-json file://replicator_stats.json
+aws dynamodb put-item --table-name replicator_stats --item '{ "PK": {"S":"replicated_count"}, "cnt": {"N":"0"}}'
 vim loader_stats.json
-
 {
-
-"AttributeDefinitions": [
-
-{
-
-"AttributeName": "PK",
-
-"AttributeType": "S"
-
+        "AttributeDefinitions": [
+            {
+                "AttributeName": "PK",
+                "AttributeType": "S"
+            }
+        ],
+       "BillingMode": "PAY_PER_REQUEST",
+        "TableName": "loader_stats",
+        "KeySchema": [
+            {
+                "KeyType": "HASH",
+                "AttributeName": "PK"
+            }
+        ]
 }
-
-],
-
-"BillingMode": "PAY_PER_REQUEST",
-
-"TableName": "loader_stats",
-
-"KeySchema": [
-
-{
-
-"KeyType": "HASH",
-
-"AttributeName": "PK"
-
-}
-
-]
-
-}
-
 aws dynamodb create-table --cli-input-json file://loader_stats.json
-
-aws dynamodb put-item --table-name loader_stats --item '{ "PK":
-{"S":"loaded_count"}, "cnt": {"N":"0"}}'
+aws dynamodb put-item --table-name loader_stats --item '{ "PK": {"S":"loaded_count"}, "cnt": {"N":"0"}}'
+```
 
 #### 北京区域
 
-在北京区域的压测服务器上通过json创建DynamoDB表，创建方式和前述新加坡区域类似。先编写json如下，读者在工作中可以按照实际情况修改相关配置。
-
-vim user-cn.json
-
-{
-
-"AttributeDefinitions": [
-
-{
-
-"AttributeName": "PK",
-
-"AttributeType": "S"
-
-}
-
-],
-
-"BillingMode": "PAY_PER_REQUEST",
-
-"TableName": "user-cn",
-
-"StreamSpecification": {
-
-"StreamViewType": "NEW_AND_OLD_IMAGES",
-
-"StreamEnabled": true
-
-},
-
-"KeySchema": [
-
-{
-
-"KeyType": "HASH",
-
-"AttributeName": "PK"
-
-}
-
-]
-
-}
-
-然后用命令创建DynamoDB表user-cn
-
-aws dynamodb create-table --cli-input-json <file://user-cn.json> --profile cn
-
-最后可以验证
-
-aws dynamodb describe-table --table-name user-cn --profile cn
-
-用类似方法创建DynamoDB表replicator_stats和loader_stats
-（replicator_stats.json及loader_stats.json文件内容和新加坡区域一样）
-
-aws dynamodb create-table --cli-input-json <file://replicator_stats.json>
---profile cn
-
-aws dynamodb put-item --table-name replicator_stats --item '{ "PK":
-{"S":"replicated_count"}, "cnt": {"N":"0"}}'
-
-aws dynamodb create-table --cli-input-json <file://loader_stats.json> --profile
-cn
-
-aws dynamodb put-item --table-name loader_stats --item '{ "PK":
-{"S":"loaded_count"}, "cnt": {"N":"0"}}'
+在北京区域的压测服务器上通过json创建user-cn表，创建方式和前述新加坡区域类似（注意替换表名为user-cn）。再用类似方法创建DynamoDB表replicator_stats和loader_stats （replicator_stats.json及loader_stats.json文件内容和新加坡区域一样）
 
 ### 1.3 准备parameter store里的参数
 
 #### 新加坡区域
 
-创建/DDBReplication/TableCN/AccessKey
-（String）和/DDBReplication/TableCN/SecretKey（SecureString），分别存入中国区用户的AK/SK
+创建/DDBReplication/TableCN/AccessKey（String）和/DDBReplication/TableCN/SecretKey（SecureString），分别存入中国区用户的AK/SK
 
-aws ssm put-parameter --name /DDBReplication/TableCN/AccessKey --value
-\<access_key\> --type String --profile sg
+```bash
+aws ssm put-parameter --name /DDBReplication/TableCN/AccessKey --value <access_key> --type String
+aws ssm put-parameter --name /DDBReplication/TableCN/SecretKey --value <secret_key> --type SecureString
+```
 
-aws ssm put-parameter --name /DDBReplication/TableCN/SecretKey --value
-\<secret_key\> --type SecureString --profile sg
+
 
 #### 北京区域
 
 创建/DDBReplication/TableSG/AccessKey
 （String）和/DDBReplication/TableSG/SecretKey（SecureString），分别存入Global用户的AK/SK
 
-aws ssm put-parameter --name /DDBReplication/TableSG/AccessKey --value
-\<access_key\> --type String --profile cn
+```bash
+aws ssm put-parameter --name /DDBReplication/TableSG/AccessKey --value <access_key> --type String
+aws ssm put-parameter --name /DDBReplication/TableSG/SecretKey --value <secret_key> --type SecureString
+```
 
-aws ssm put-parameter --name /DDBReplication/TableSG/SecretKey --value
-\<secret_key\> --type SecureString --profile cn
+
 
 ### 1.4 创建SQS
 
@@ -388,35 +228,41 @@ aws ssm put-parameter --name /DDBReplication/TableSG/SecretKey --value
 
 创建2个标准SQS队列用于Lambda的On-failure Destination。
 
-aws sqs create-queue --queue-name ddbstreamsg --profile sg
-
-aws sqs create-queue --queue-name ddbreplicatorsg --profile sg
+```bash
+aws sqs create-queue --queue-name ddbstreamsg 
+aws sqs create-queue --queue-name ddbreplicatorsg
+```
 
 #### 北京区域
 
 创建2个标准SQS队列用于Lambda的On-failure Destination。
 
-aws sqs create-queue --queue-name ddbstreamcn --profile cn
-
-aws sqs create-queue --queue-name ddbreplicatorcn --profile cn
+```bash
+aws sqs create-queue --queue-name ddbstreamcn 
+aws sqs create-queue --queue-name ddbreplicatorcn
+```
 
 ### 1.5 创建Kinesis Data Stream
 
 #### 新加坡区域
 
-创建Kinesis Data
-Stream，因为DEMO中写入量有限，选取一个shard，实际生产中请酌情调整
+创建Kinesis Data Stream，因为DEMO中写入量有限，选取一个shard，实际生产中请酌情调整
 
+```bash
 aws kinesis create-stream --stream-name ddb_replication_stream_sg --shard-count
-1 --profile sg
+1
+```
+
+
 
 #### 北京区域
 
-创建Kinesis Data
-Stream，因为DEMO中写入量有限，选取一个shard，实际生产中请酌情调整
+创建Kinesis Data Stream，因为DEMO中写入量有限，选取一个shard，实际生产中请酌情调整
 
+```bash
 aws kinesis create-stream --stream-name ddb_replication_stream_cn --shard-count
-1 --profile cn
+1 
+```
 
 ### 创建Lambda role并且授权
 
@@ -434,22 +280,19 @@ aws kinesis create-stream --stream-name ddb_replication_stream_cn --shard-count
 
 -   访问lambda On-failure destination的SQS队列的权限
 
--   访问VPC的权限：这部分权限我们使用现成的policy[AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)
-    、AWSLambdaVPCAccessExecutionRole
+-   访问VPC的权限：这部分权限我们使用现成的policy[AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)、AWSLambdaVPCAccessExecutionRole
 
+```bash
 aws iam create-policy --policy-name ddb_send_to_kinesis_policy --policy-document
-file://iam_policy_example/ddb_send_to_kinesis_policy_sg.json --profile sg
-
+file://iam_policy_example/ddb_send_to_kinesis_policy_sg.json
 aws iam create-role --role-name ddb_send_to_kinesis_role
 --assume-role-policy-document
-file://iam_policy_example/lambda-role-trust-policy.json --profile sg
-
+file://iam_policy_example/lambda-role-trust-policy.json 
 aws iam attach-role-policy --role-name ddb_send_to_kinesis_role --policy-arn
-arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole --profile
-sg
-
+arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole 
 aws iam attach-role-policy --role-name ddb_send_to_kinesis_role --policy-arn
-arn:aws:iam::\<Global account\>:policy/ddb_send_to_kinesis_policy --profile sg
+arn:aws:iam::<Global account>:policy/ddb_send_to_kinesis_policy 
+```
 
 2、将新加坡Kinesis Data Stream中event写入新加坡区DDB需要以下权限：
 
@@ -461,25 +304,20 @@ arn:aws:iam::\<Global account\>:policy/ddb_send_to_kinesis_policy --profile sg
 
 -   访问lambda On-failure destination的SQS队列的权限
 
--   访问VPC的权限：这部分权限我们使用现成的policy
-    [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)
-    、AWSLambdaVPCAccessExecutionRole
+-   访问VPC的权限：这部分权限我们使用现成的policy [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)、AWSLambdaVPCAccessExecutionRole
 
+```bash
 aws iam create-policy --policy-name replicator_kinesis_policy --policy-document
-file:// iam_policy_example/replicator_kinesis_policy_sg.json --profile sg
-
+file://iam_policy_example/replicator_kinesis_policy_sg.json 
 aws iam create-role --role-name replicator_kinesis_role
---assume-role-policy-document file://
-iam_policy_example/lambda-role-trust-policy.json --profile sg
-
+--assume-role-policy-document file://iam_policy_example/lambda-role-trust-policy.json
 aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
 arn:aws-cn:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-
 aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
-arn:aws:iam::\<Global account\>:policy/replicator_kinesis_policy
-
+arn:aws:iam::<Global account ID>:policy/replicator_kinesis_policy
 aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
 arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+```
 
 #### 北京区域
 
@@ -497,19 +335,16 @@ arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
     [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)
     、AWSLambdaVPCAccessExecutionRole
 
+```bash
 aws iam create-policy --policy-name ddb_send_to_kinesis_policy --policy-document
-file://iam_policy_example/ddb_send_to_kinesis_policy_cn.json --profile cn
-
+file://iam_policy_example/ddb_send_to_kinesis_policy_cn.json
 aws iam create-role --role-name ddb_send_to_kinesis_role
---assume-role-policy-document
-file://iam_policy_example/lambda-role-trust-policy.json --profile cn
-
+--assume-role-policy-document file://iam_policy_example/lambda-role-trust-policy.json
 aws iam attach-role-policy --role-name ddb_send_to_kinesis_role --policy-arn
 arn:aws-cn:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
---profile cn
-
 aws iam attach-role-policy --role-name ddb_send_to_kinesis_role --policy-arn
-arn:aws-cn:iam::\<China account\>:policy/ddb_send_to_kinesis_policy --profile cn
+arn:aws-cn:iam::<China account ID>:policy/ddb_send_to_kinesis_policy
+```
 
 2、将Kinesis Data Stream中event写入DDB需要以下权限：
 
@@ -525,22 +360,21 @@ arn:aws-cn:iam::\<China account\>:policy/ddb_send_to_kinesis_policy --profile cn
     [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)
     、AWSLambdaVPCAccessExecutionRole
 
+```bash
 aws iam create-policy --policy-name replicator_kinesis_policy --policy-document
-file://iam_policy_example/replicator_kinesis_policy_cn.json --profile cn
-
+file://iam_policy_example/replicator_kinesis_policy_cn.json 
 aws iam create-role --role-name replicator_kinesis_role
 --assume-role-policy-document
-file://iam_policy_example/lambda-role-trust-policy.json --profile cn
-
+file://iam_policy_example/lambda-role-trust-policy.json 
 aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
 arn:aws-cn:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
---profile cn
-
 aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
-arn:aws-cn:iam::\<China account\>:policy/replicator_kinesis_policy --profile cn
-
+arn:aws-cn:iam::\<China account\>:policy/replicator_kinesis_policy 
 aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
-arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole --profile cn
+arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole 
+```
+
+
 
 #### （可选）安装代理
 
@@ -548,41 +382,34 @@ arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole --profile cn
 
 以ec2-user运行
 
+```bash
 sudo yum install squid
-
 sudo vi /etc/sysctl.conf
-
 net.ipv4.ip_forward = 1
-
 sudo sysctl -p /etc/sysctl.conf
-
-sudo sysctl -a \|grep -w ip_forward
+sudo sysctl -a |grep -w ip_forward
 
 grep -n 'http_access deny all' /etc/squid/squid.conf
-
 56:http_access deny all
+```
 
 这里修改http_access为allow
 all，那么代理服务器的安全组就需要设置为只对lambda所在VPC的NAT网段放行，否则不安全
 
-grep -n http /etc/squid/squid.conf \|grep -w all
-
+```bash
+grep -n http /etc/squid/squid.conf |grep -w all
 56:http_access allow all
 
 sudo vi /etc/squid/squid.conf
-
 http_port 80
-
 sudo systemctl start squid
-
 sudo systemctl status squid
-
 sudo systemctl enable squid.service
+```
 
 代理服务器的安全组设定
 
--   两个区域内代理服务器的安全组中设定只允许对端region lambda所在VPC的NAT
-    Gateway的http/https流量进来。
+-   两个区域内代理服务器的安全组中设定只允许对端region lambda所在VPC的NAT Gateway的http/https流量进来。
 
 ### 1.7 创建send to kinesis 的lambda函数
 
@@ -593,12 +420,16 @@ sudo systemctl enable squid.service
 创建python lambda
 function命名为ddb-send-to-kinesis，上传ddb_send_to_kinesis的Lambda代码，代码请见[send_to_kinesis.py](https://github.com/aws-samples/aws-dynamodb-cross-region-replication/blob/master/send_to_kinesis.py)
 
+```bash
 zip send_kinesis.zip send_to_kinesis.py
 
-aws lambda create-function --role arn:aws:iam::\<Global
-account\>:role/ddb_send_to_kinesis_role --runtime python3.7 --function-name
+aws lambda create-function --role arn:aws:iam::<Global
+account ID>:role/ddb_send_to_kinesis_role --runtime python3.7 --function-name
 ddb_send_to_kinesis --handler send_to_kinesis.lambda_handler --zip-file
-fileb://send_kinesis.zip --timeout 60 --region ap-southeast-1
+fileb://send_kinesis.zip --timeout 60 
+```
+
+
 
 ##### 设置环境变量
 
