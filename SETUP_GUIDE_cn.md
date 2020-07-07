@@ -1,4 +1,4 @@
-手动部署
+1. 手动部署环境
 ========================================
 
 在北京区域创建以下对象：
@@ -54,9 +54,6 @@
 -   新加坡区域的Lambda replicator_kinesis将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表，在写入时会通过condition判断变更记录的时间戳是否大于当前记录的变更时间戳，只有大于才会写入。
     
 -   新加坡区域的user-sg的变化记录又出现在DynamoDB stream中，并被新加坡区域的Lambda ddb_send_to_kinesis读取，而后判断记录的last_updater_region是否是北京区域，因为该变化恰恰是来自北京，所以该记录被丢弃，从而避免了循环复制。
-
-1. 部署环境
---------
 
 ### 1.1 准备压测机
 
@@ -583,8 +580,8 @@ aws lambda update-function-configuration --function-name replicator_kinesis --en
 
 -   Retry attempts:100
 
-2 测试
--------
+2 测试以及监控
+=======
 
 ### 2.1 准备加载数据脚本
 
