@@ -4,22 +4,21 @@
 在北京区域创建以下对象：
 
 -   3张DynamoDB表，
-
-    -   user-cn存储用户信息，数据将和新加坡区域的user-sg保持同步
-
-    -   loader_stats 表用来统计压测时对user-cn变更的记录数
-
-    -   replicator-stats表用来统计复制完成的记录数，以便监控复制进度
-
+-   **user-cn**存储用户信息，数据将和新加坡区域的user-sg保持同步
+    
+-   **loader_stats** 表用来统计压测时对user-cn变更的记录数
+    
+-   **replicator-stats**表用来统计复制完成的记录数，以便监控复制进度
+    
 -   User-cn开启DynamoDB stream，用于记录user-cn表的所有变更
 
--   Kinesis 流ddb_replication_stream_cn：用于记录新加坡区域DynamoDB表user-sg的所有变更
+-   Kinesis 流**ddb_replication_stream_cn**：用于记录新加坡区域DynamoDB表user-sg的所有变更
     
--   Lambda函数replicator_kinesis：将北京区域中ddb_replication_stream_cn上的变更记录写入user-cn表
+-   Lambda函数**replicator_kinesis**：将北京区域中ddb_replication_stream_cn上的变更记录写入user-cn表
     
--   Lambda 函数ddb_send_to_kinesis：将从北京区域的DynamoDB stream中读取变更记录然后写入到新加坡区域的ddb_replication_stream_sg
+-   Lambda 函数**ddb_send_to_kinesis**：将从北京区域的DynamoDB stream中读取变更记录然后写入到新加坡区域的ddb_replication_stream_sg
     
--   Parameter store中存储新加坡区域IAM用户的AK/SK
+-   **Parameter store**中存储新加坡区域IAM用户的AK/SK
 
 -   如果客户有direct connect，可以创建VPC并在VPC内部署一个代理服务器，lambda也部署在VPC内，令lambda利用新加坡区域的代理服务器进而利用direct connect，从而减少网络延迟并提高网络稳定性
 
@@ -27,33 +26,33 @@
 
 -   3张DynamoDB表
 
-    -   user-sg存储用户信息，数据将于北京区域的user-cn保持同步
+    -   **user-sg**存储用户信息，数据将于北京区域的user-cn保持同步
 
-    -   loader_stats 表用来统计压测时对user-sg变更的记录数
+    -   **loader_stats** 表用来统计压测时对user-sg变更的记录数
 
-    -   replicator-stats表用来存储复制的变更记录数，以便监控复制进度
+    -   **replicator-stats**表用来存储复制的变更记录数，以便监控复制进度
 
 -   User-sg开启DynamoDB stream，用于记录user-cn表的所有变更
 
--   Kinesis stream ddb_replication_stream_sg用于记录北京区域DynamoDB表user-cn的所有变更
+-   Kinesis stream **ddb_replication_stream_sg**用于记录北京区域DynamoDB表user-cn的所有变更
     
--   Lambda函数replicator_kinesis将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表
+-   Lambda函数**replicator_kinesis**将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表
     
--   Lambda 函数ddb_send_to_kinesis将从新加坡区域的DynamoDB stream中读取变更记录然后写入到北京区域的ddb_replication_stream_cn
+-   Lambda 函数**ddb_send_to_kinesis**将从新加坡区域的DynamoDB stream中读取变更记录然后写入到北京区域的ddb_replication_stream_cn
     
--   Parameter store中存储北京区域IAM用户的AK/SK
+-   **Parameter store**中存储北京区域IAM用户的AK/SK
 
 -   如果客户有跨境专线连接AWS中国区域和海外区域，可以创建VPC并在VPC内部署一个代理服务器，lambda也部署在VPC内，令lambda利用北京区域的代理服务器进而利用direct connect，从而减少网络延迟并提高网络稳定性
 
 因为对象较多，我们以北京区域DynamoDB表user-cn中的变更数据向新加坡区域同步过程为例，将整个数据流梳理一遍，从新加坡DynamoDB表user-sg同步数据到user-cn的过程类似将不再赘述
 
--   当数据写入北京区域DynamoDB表user-cn后，变更记录首先会写入北京区域的DynamoDB stream
+-   当数据写入北京区域DynamoDB表**user-cn**后，变更记录首先会写入北京区域的DynamoDB stream
     
--   北京区域的Lambda ddb_send_to_kinesis将从北京区域的DynamoDB stream中读取变更记录，首先判断记录last_updater_region是否是新加坡区域，如果是就丢弃，不是则写入到新加坡区域的ddb_replication_stream_sg，这一步将跨region，主要的网络延迟就在这一步
+-   北京区域的Lambda **ddb_send_to_kinesis**将从北京区域的DynamoDB stream中读取变更记录，首先判断记录**last_updater_region**是否是新加坡区域，如果是就丢弃，不是则写入到新加坡区域的**ddb_replication_stream_sg**，这一步将跨region，主要的网络延迟就在这一步
     
--   新加坡区域的Lambda replicator_kinesis将新加坡区域中ddb_replication_stream_sg上的变更记录写入user-sg表，在写入时会通过condition判断变更记录的时间戳是否大于当前记录的变更时间戳，只有大于才会写入。
+-   新加坡区域的Lambda **replicator_kinesis**将新加坡区域中**ddb_replication_stream_sg**上的变更记录写入**user-sg**表，在写入时会通过condition判断变更记录的时间戳是否大于当前记录的变更时间戳，只有大于才会写入。
     
--   新加坡区域的user-sg的变化记录又出现在DynamoDB stream中，并被新加坡区域的Lambda ddb_send_to_kinesis读取，而后判断记录的last_updater_region是否是北京区域，因为该变化恰恰是来自北京，所以该记录被丢弃，从而避免了循环复制。
+-   新加坡区域的user-sg的变化记录又出现在DynamoDB stream中，并被新加坡区域的Lambda **ddb_send_to_kinesis**读取，而后判断记录的**last_updater_region**是否是北京区域，因为该变化恰恰是来自北京，所以该记录被丢弃，从而避免了循环复制。
 
 ### 1.1 准备压测机
 
@@ -239,8 +238,7 @@ aws sqs create-queue --queue-name ddbreplicatorcn
 创建Kinesis Data Stream，因为DEMO中写入量有限，选取一个shard，实际生产中请酌情调整
 
 ```bash
-aws kinesis create-stream --stream-name ddb_replication_stream_sg --shard-count
-1
+aws kinesis create-stream --stream-name ddb_replication_stream_sg --shard-count 1
 ```
 
 #### 北京区域
@@ -248,8 +246,7 @@ aws kinesis create-stream --stream-name ddb_replication_stream_sg --shard-count
 创建Kinesis Data Stream，因为DEMO中写入量有限，选取一个shard，实际生产中请酌情调整
 
 ```bash
-aws kinesis create-stream --stream-name ddb_replication_stream_cn --shard-count
-1 
+aws kinesis create-stream --stream-name ddb_replication_stream_cn --shard-count 1 
 ```
 
 ### 1.6 创建Lambda role并且授权
@@ -271,13 +268,11 @@ aws kinesis create-stream --stream-name ddb_replication_stream_cn --shard-count
 -   访问VPC的权限：这部分权限我们使用现成的policy [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)、AWSLambdaVPCAccessExecutionRole
 
 ```bash
-aws iam create-policy --policy-name ddb_send_to_kinesis_policy --policy-document
-file://iam_policy_example/ddb_send_to_kinesis_policy_sg.json
+aws iam create-policy --policy-name ddb_send_to_kinesis_policy --policy-document file://iam_policy_example/ddb_send_to_kinesis_policy_sg.json
 aws iam create-role --role-name ddb_send_to_kinesis_role
 --assume-role-policy-document
 file://iam_policy_example/lambda-role-trust-policy.json 
-aws iam attach-role-policy --role-name ddb_send_to_kinesis_role --policy-arn
-arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole 
+aws iam attach-role-policy --role-name ddb_send_to_kinesis_role --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole 
 aws iam attach-role-policy --role-name ddb_send_to_kinesis_role --policy-arn
 arn:aws:iam::<Global account>:policy/ddb_send_to_kinesis_policy 
 ```
@@ -295,8 +290,7 @@ arn:aws:iam::<Global account>:policy/ddb_send_to_kinesis_policy
 -   访问VPC的权限：这部分权限我们使用现成的policy [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole)、AWSLambdaVPCAccessExecutionRole
 
 ```bash
-aws iam create-policy --policy-name replicator_kinesis_policy --policy-document
-file://iam_policy_example/replicator_kinesis_policy_sg.json 
+aws iam create-policy --policy-name replicator_kinesis_policy --policy-document file://iam_policy_example/replicator_kinesis_policy_sg.json 
 aws iam create-role --role-name replicator_kinesis_role
 --assume-role-policy-document file://iam_policy_example/lambda-role-trust-policy.json
 aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
@@ -347,17 +341,11 @@ arn:aws-cn:iam::<China account ID>:policy/ddb_send_to_kinesis_policy
 -   访问VPC的权限：这部分权限我们使用现成的policy [AWSLambdaBasicExecutionRole](https://console.amazonaws.cn/iam/home?region=cn-north-1#/policies/arn%3Aaws-cn%3Aiam%3A%3Aaws%3Apolicy%2Fservice-role%2FAWSLambdaBasicExecutionRole) ，AWSLambdaVPCAccessExecutionRole
 
 ```bash
-aws iam create-policy --policy-name replicator_kinesis_policy --policy-document
-file://iam_policy_example/replicator_kinesis_policy_cn.json 
-aws iam create-role --role-name replicator_kinesis_role
---assume-role-policy-document
-file://iam_policy_example/lambda-role-trust-policy.json 
-aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
-arn:aws-cn:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
-aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
-arn:aws-cn:iam::\<China account\>:policy/replicator_kinesis_policy 
-aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn
-arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole 
+aws iam create-policy --policy-name replicator_kinesis_policy --policy-document file://iam_policy_example/replicator_kinesis_policy_cn.json 
+aws iam create-role --role-name replicator_kinesis_role --assume-role-policy-document file://iam_policy_example/lambda-role-trust-policy.json 
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn arn:aws-cn:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn arn:aws-cn:iam::\<China account\>:policy/replicator_kinesis_policy 
+aws iam attach-role-policy --role-name replicator_kinesis_role --policy-arn arn:aws-cn:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole 
 ```
 
 #### （可选）安装代理
@@ -407,9 +395,7 @@ sudo systemctl enable squid.service
 zip send_kinesis.zip send_to_kinesis.py
 
 aws lambda create-function --role arn:aws:iam::<Global
-account ID>:role/ddb_send_to_kinesis_role --runtime python3.7 --function-name
-ddb_send_to_kinesis --handler send_to_kinesis.lambda_handler --zip-file
-fileb://send_kinesis.zip --timeout 60 
+account ID>:role/ddb_send_to_kinesis_role --runtime python3.7 --function-name ddb_send_to_kinesis --handler send_to_kinesis.lambda_handler --zip-file fileb://send_kinesis.zip --timeout 60 
 ```
 
 ##### 设置环境变量
